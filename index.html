@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chapter Readability Checker</title>
+<style>
+:root{--bg:#faf8f4;--fg:#1f1d1a;--mut:#6b665e;--card:#fff;--bd:#e4dfd5;--ac:#b4441f;--hl:#ffe3a3;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171512;--fg:#efe9df;--mut:#a39c90;--card:#201d19;--bd:#38332c;--ac:#ff8a5c;--hl:#5a4514}}
+:root[data-theme="dark"]{--bg:#171512;--fg:#efe9df;--mut:#a39c90;--card:#201d19;--bd:#38332c;--ac:#ff8a5c;--hl:#5a4514}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 Georgia,"Times New Roman",serif}
+main{max-width:760px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:1.7rem;margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 20px;font-family:system-ui,sans-serif;font-size:.95rem}
+textarea{width:100%;min-height:200px;padding:14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg);font:inherit;resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0 24px;font-family:system-ui,sans-serif}
+button{border:0;border-radius:8px;padding:10px 18px;font:600 .95rem system-ui,sans-serif;cursor:pointer}
+.go{background:var(--ac);color:#fff}
+.ghost{background:transparent;color:var(--mut);border:1px solid var(--bd)}
+.note{color:var(--mut);font-size:.82rem}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:18px}
+.score{display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+.big{font-size:3rem;font-weight:700;color:var(--ac);line-height:1}
+.lab{font-family:system-ui,sans-serif;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:14px;font-family:system-ui,sans-serif}
+.stats div{font-size:.78rem;color:var(--mut)}.stats b{display:block;font-size:1.1rem;color:var(--fg)}
+h2{font-size:1.1rem;margin:0 0 10px}
+#text{white-space:pre-wrap;overflow-wrap:anywhere}
+mark{background:var(--hl);color:inherit;border-radius:3px;padding:1px 2px}
+mark sup{font:700 .7rem system-ui,sans-serif;color:var(--ac);margin-right:3px}
+ol{padding-left:22px;margin:0}li{margin-bottom:10px;cursor:pointer}
+.meta{display:block;font:.78rem system-ui,sans-serif;color:var(--mut)}
+[hidden]{display:none}
+</style></head><body><main>
+<h1>Chapter Readability Checker</h1>
+<p class="sub">Paste a chapter. Get a readability score and your five hardest sentences. Free, and your text never leaves your browser.</p>
+<textarea id="in" placeholder="Paste your chapter here…"></textarea>
+<div class="row"><button class="go" id="run">Analyse</button><button class="ghost" id="sample">Try a sample</button><span class="note">Scores are estimates; they work best on 200+ words.</span></div>
+<div id="out" hidden>
+<div class="card"><div class="score"><span class="big" id="fre"></span><span><span class="lab" id="lbl"></span><br><span class="note">Flesch Reading Ease (higher = easier). Most popular fiction sits around 60–80.</span></span></div>
+<div class="stats" id="stats"></div></div>
+<div class="card"><h2>Your 5 hardest sentences</h2><ol id="top"></ol></div>
+<div class="card"><h2>Chapter with hard sentences highlighted</h2><div id="text"></div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+//<core>
+const ABBR=/\b(Mr|Mrs|Ms|Dr|Prof|St|Jr|Sr|vs|etc)\./gi;
+function syl(w){w=w.toLowerCase().replace(/[^a-z]/g,'');if(!w)return 0;if(w.length<=3)return 1;w=w.replace(/(?:[^laeiouy]es|[^tdaeiouy]ed|[^laeiouy]e)$/,'').replace(/^y/,'');const m=w.match(/[aeiouy]{1,2}/g);return m?m.length:1}
+function words(s){return s.match(/[A-Za-z][A-Za-z'’-]*/g)||[]}
+function split(t){
+  const m=t.replace(ABBR,x=>x.slice(0,-1)+'\u0001'),re=/[.!?]+["'”’)\]]*(?=\s|$)|\n\s*\n/g,out=[];let s=0,r;
+  const push=(a,b)=>{const raw=t.slice(a,b),lead=raw.length-raw.trimStart().length,x=raw.trim();if(/[A-Za-z]/.test(x))out.push({start:a+lead,end:a+lead+x.length,text:x})};
+  while((r=re.exec(m))){push(s,r[0][0]==='\n'?r.index:r.index+r[0].length);s=r.index+r[0].length}
+  push(s,t.length);return out}
+function analyse(t){
+  const ss=split(t);let W=0,SY=0;
+  ss.forEach(x=>{const ws=words(x.text);x.w=ws.length;x.sy=ws.reduce((a,b)=>a+syl(b),0);x.grade=x.w?0.39*x.w+11.8*x.sy/x.w-15.59:0;W+=x.w;SY+=x.sy});
+  const S=ss.length||1,fre=206.835-1.015*(W/S)-84.6*(SY/Math.max(W,1)),fk=0.39*(W/S)+11.8*(SY/Math.max(W,1))-15.59;
+  const top=ss.filter(x=>x.w>=6).sort((a,b)=>b.grade-a.grade).slice(0,5);
+  return{ss,W,S,SY,fre,fk,top}}
+//</core>
+const band=f=>f>=90?'Very easy':f>=80?'Easy':f>=70?'Fairly easy':f>=60?'Plain English':f>=50?'Fairly difficult':f>=30?'Difficult':'Very difficult';
+function run(){
+  const t=$('in').value;if(words(t).length<20){alert('Paste at least a few sentences (20+ words).');return}
+  const a=analyse(t);$('out').hidden=false;
+  $('fre').textContent=Math.round(a.fre);$('lbl').textContent=band(a.fre);
+  const st=[['Words',a.W],['Sentences',a.S],['Words / sentence',(a.W/a.S).toFixed(1)],['US grade level',Math.max(a.fk,0).toFixed(1)],['Reading time',Math.max(1,Math.round(a.W/230))+' min']];
+  $('stats').innerHTML='';st.forEach(([k,v])=>{const d=document.createElement('div');d.textContent=k;const b=document.createElement('b');b.textContent=v;d.prepend(b);$('stats').append(d)});
+  const ol=$('top');ol.innerHTML='';const tx=$('text');tx.innerHTML='';
+  const ranked=new Map();a.top.forEach((x,i)=>ranked.set(x,i+1));
+  let pos=0;const marks={};
+  a.ss.forEach(x=>{if(!ranked.has(x))return;tx.append(t.slice(pos,x.start));const m=document.createElement('mark'),n=ranked.get(x),sp=document.createElement('sup');sp.textContent=n;m.append(sp,x.text);m.id='m'+n;tx.append(m);pos=x.end});
+  tx.append(t.slice(pos));
+  a.top.forEach((x,i)=>{const li=document.createElement('li');li.textContent=x.text;const mt=document.createElement('span');mt.className='meta';mt.textContent=x.w+' words · '+(x.sy/x.w).toFixed(1)+' syllables/word · grade '+x.grade.toFixed(0);li.append(mt);li.onclick=()=>$('m'+(i+1)).scrollIntoView({behavior:'smooth',block:'center'});ol.append(li)});
+  $('out').scrollIntoView({behavior:'smooth'})}
+$('run').onclick=run;
+$('sample').onclick=()=>{$('in').value="It was a bright cold day in April, and the clocks were striking thirteen. Mr. Hale walked slowly down the lane. He did not look back.\n\nNevertheless, the bureaucratic apparatus that had systematically dismantled the village's communal institutions, notwithstanding the persistent and increasingly desperate protestations of its inhabitants, continued its unrelenting administrative consolidation. She waited. The unprecedented circumstances surrounding the aforementioned negotiations necessitated considerable deliberation among the representatives, who nonetheless remained unconvinced that reconciliation was achievable. Rain fell on the roof. \"I can't,\" she said. The extraordinarily complicated relationship between the two families had, over several generations, become inseparable from the geography of the valley itself, which neither side was willing to relinquish."};
+</script></main></body></html>
